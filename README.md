@@ -1,3 +1,7 @@
+This forked version contains some minor changes to allow it to better work with [AI Art Generator](https://github.com/rbbrdckybk/ai-art-generator). Follow the [setup instructions](https://github.com/rbbrdckybk/ai-art-generator#setup) at the main repo to get this working.
+
+
+
 <h1 align="center">Optimized Stable Diffusion</h1>
 <p align="center">
     <img src="https://img.shields.io/github/last-commit/basujindal/stable-diffusion?logo=Python&logoColor=green&style=for-the-badge"/>
