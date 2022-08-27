@@ -19,6 +19,9 @@ from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 
+# BK suppress warnings
+from transformers import logging
+logging.set_verbosity_error()
 
 def chunk(it, size):
     it = iter(it)
@@ -267,8 +270,13 @@ def main():
                         if not opt.skip_save:
                             for x_sample in x_samples:
                                 x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                                Image.fromarray(x_sample.astype(np.uint8)).save(
-                                    os.path.join(sample_path, f"{base_count:05}.png"))
+
+                                # BK save seed in output filename
+                                #Image.fromarray(x_sample.astype(np.uint8)).save(os.path.join(sample_path, f"{base_count:05}.png"))
+                                img = Image.fromarray(x_sample.astype(np.uint8))
+                                img.save(os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.png"))
+                                opt.seed += 1
+
                                 base_count += 1
                         all_samples.append(x_samples)
 
@@ -285,8 +293,8 @@ def main():
 
                 toc = time.time()
 
-    print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
-          f" \nEnjoy.")
+    # BK remove '/samples' from outpath
+    print(f"Your images are ready and waiting for you here: \n{outpath.replace('/samples', '')} \n")
 
 
 if __name__ == "__main__":

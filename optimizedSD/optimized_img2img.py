@@ -166,7 +166,10 @@ tic = time.time()
 os.makedirs(opt.outdir, exist_ok=True)
 outpath = opt.outdir
 
-sample_path = os.path.join(outpath, "_".join(re.split(":| ", opt.prompt)))[:150]
+
+# BK
+sample_path = outpath + '/samples'
+#sample_path = os.path.join(outpath, "_".join(re.split(":| ", opt.prompt)))[:150]
 os.makedirs(sample_path, exist_ok=True)
 base_count = len(os.listdir(sample_path))
 grid_count = len(os.listdir(outpath)) - 1
@@ -337,7 +340,7 @@ time_taken = (toc - tic) / 60.0
 print(
     (
         "Samples finished in {0:.2f} minutes and exported to "
-        + sample_path
+        + sample_path.replace('/samples', '')
         + "\n Seeds used = "
         + seeds[:-1]
     ).format(time_taken)

@@ -1,0 +1,7 @@
+Make sure you name it model.ckpt!
+
+You can download the model here:
+https://huggingface.co/CompVis/stable-diffusion-v-1-4-original/resolve/main/sd-v1-4.ckpt
+
+You may need to register first here:
+https://huggingface.co/CompVis
