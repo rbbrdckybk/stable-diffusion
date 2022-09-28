@@ -268,7 +268,7 @@ with torch.no_grad():
             # BK
             #sample_path = os.path.join(outpath, "_".join(re.split(":| ", prompts[0])))[:150]
             gpuId = opt.device.replace('cuda:', '')
-            sample_path = os.path.join(outpath, "samples_" + gpuId)
+            sample_path = os.path.join(outpath, "gpu_" + gpuId)
 
             os.makedirs(sample_path, exist_ok=True)
             base_count = len(os.listdir(sample_path))
