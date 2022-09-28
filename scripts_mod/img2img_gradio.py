@@ -20,11 +20,10 @@ from einops import rearrange, repeat
 from contextlib import nullcontext
 from ldm.util import instantiate_from_config
 from transformers import logging
-
+import pandas as pd
+from optimUtils import split_weighted_subprompts, logger
 logging.set_verbosity_error()
-from split_subprompts import split_weighted_subprompts
 import mimetypes
-
 mimetypes.init()
 mimetypes.add_type("application/javascript", ".js")
 
@@ -59,7 +58,6 @@ def load_img(image, h0, w0):
     image = image[None].transpose(0, 3, 1, 2)
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
-
 
 config = "optimizedSD/v1-inference.yaml"
 ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
@@ -96,7 +94,6 @@ _, _ = modelFS.load_state_dict(sd, strict=False)
 modelFS.eval()
 del sd
 
-
 def generate(
     image,
     prompt,
@@ -112,11 +109,20 @@ def generate(
     device,
     seed,
     outdir,
+    img_format,
     turbo,
     full_precision,
 ):
 
-    seeds = ""
+    if seed == "":
+        seed = randint(0, 1000000)
+    seed = int(seed)
+    seed_everything(seed)
+
+    # Logging
+    sampler = "ddim"
+    logger(locals(), log_csv = "logs/img2img_gradio_logs.csv")
+
     init_image = load_img(image, Height, Width).to(device)
     model.unet_bs = unet_bs
     model.turbo = turbo
@@ -135,11 +141,6 @@ def generate(
     sample_path = os.path.join(outpath, "_".join(re.split(":| ", prompt)))[:150]
     os.makedirs(sample_path, exist_ok=True)
     base_count = len(os.listdir(sample_path))
-
-    if seed == "":
-        seed = randint(0, 1000000)
-    seed = int(seed)
-    seed_everything(seed)
 
     # n_rows = opt.n_rows if opt.n_rows > 0 else batch_size
     assert prompt is not None
@@ -166,6 +167,7 @@ def generate(
         precision_scope = nullcontext
 
     all_samples = []
+    seeds = ""
     with torch.no_grad():
         all_samples = list()
         for _ in trange(n_iter, desc="Sampling"):
@@ -191,7 +193,6 @@ def generate(
                     else:
                         c = modelCS.get_learned_conditioning(prompts)
 
-                    c = modelCS.get_learned_conditioning(prompts)
                     if device != "cpu":
                         mem = torch.cuda.memory_allocated() / 1e6
                         modelCS.to("cpu")
@@ -203,12 +204,13 @@ def generate(
                         init_latent, torch.tensor([t_enc] * batch_size).to(device), seed, ddim_eta, ddim_steps
                     )
                     # decode it
-                    samples_ddim = model.decode(
-                        z_enc,
-                        c,
-                        t_enc,
-                        unconditional_guidance_scale=scale,
-                        unconditional_conditioning=uc,
+                    samples_ddim = model.sample(
+                                    t_enc,
+                                    c,
+                                    z_enc,
+                                    unconditional_guidance_scale=scale,
+                                    unconditional_conditioning=uc,
+                                    sampler = sampler
                     )
 
                     modelFS.to(device)
@@ -220,7 +222,7 @@ def generate(
                         all_samples.append(x_sample.to("cpu"))
                         x_sample = 255.0 * rearrange(x_sample[0].cpu().numpy(), "c h w -> h w c")
                         Image.fromarray(x_sample.astype(np.uint8)).save(
-                            os.path.join(sample_path, "seed_" + str(seed) + "_" + f"{base_count:05}.png")
+                            os.path.join(sample_path, "seed_" + str(seed) + "_" + f"{base_count:05}.{img_format}")
                         )
                         seeds += str(seed) + ","
                         seed += 1
@@ -272,6 +274,7 @@ demo = gr.Interface(
         gr.Text(value="cuda"),
         "text",
         gr.Text(value="outputs/img2img-samples"),
+        gr.Radio(["png", "jpg"], value='png'),
         "checkbox",
         "checkbox",
     ],

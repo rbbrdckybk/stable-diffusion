@@ -13,9 +13,9 @@ from pytorch_lightning import seed_everything
 from torch import autocast
 from contextlib import contextmanager, nullcontext
 from ldm.util import instantiate_from_config
-from split_subprompts import split_weighted_subprompts
+from optimUtils import split_weighted_subprompts, logger
 from transformers import logging
-
+# from samplers import CompVisDenoiser
 logging.set_verbosity_error()
 
 
@@ -34,7 +34,7 @@ def load_model_from_config(ckpt, verbose=False):
 
 
 config = "optimizedSD/v1-inference.yaml"
-ckpt = "models/ldm/stable-diffusion-v1/model.ckpt"
+DEFAULT_CKPT = "models/ldm/stable-diffusion-v1/model.ckpt"
 
 parser = argparse.ArgumentParser()
 
@@ -121,7 +121,9 @@ parser.add_argument(
 parser.add_argument(
     "--device",
     type=str,
-    default="cuda",
+    # BK
+    #default="cuda",
+    default="cuda:0",
     help="specify GPU (cuda/cuda:0/cuda:1/...)",
 )
 parser.add_argument(
@@ -147,26 +149,47 @@ parser.add_argument(
     help="Reduces inference time on the expense of 1GB VRAM",
 )
 parser.add_argument(
-    "--precision", type=str, help="evaluate at this precision", choices=["full", "autocast"], default="autocast"
+    "--precision",
+    type=str,
+    help="evaluate at this precision",
+    choices=["full", "autocast"],
+    default="autocast"
+)
+parser.add_argument(
+    "--format",
+    type=str,
+    help="output image format",
+    choices=["jpg", "png"],
+    default="png",
+)
+parser.add_argument(
+    "--sampler",
+    type=str,
+    help="sampler",
+    choices=["ddim", "plms","heun", "euler", "euler_a", "dpm2", "dpm2_a", "lms"],
+    default="plms",
+)
+parser.add_argument(
+    "--ckpt",
+    type=str,
+    help="path to checkpoint of model",
+    default=DEFAULT_CKPT,
 )
 opt = parser.parse_args()
 
 tic = time.time()
 os.makedirs(opt.outdir, exist_ok=True)
 outpath = opt.outdir
-
-# BK
-sample_path = outpath + '/samples'
-#sample_path = os.path.join(outpath, "_".join(re.split(":| ", opt.prompt)))[:150]
-os.makedirs(sample_path, exist_ok=True)
-base_count = len(os.listdir(sample_path))
 grid_count = len(os.listdir(outpath)) - 1
 
 if opt.seed == None:
     opt.seed = randint(0, 1000000)
 seed_everything(opt.seed)
 
-sd = load_model_from_config(f"{ckpt}")
+# Logging
+logger(vars(opt), log_csv = "logs/txt2img_logs.csv")
+
+sd = load_model_from_config(f"{opt.ckpt}")
 li, lo = [], []
 for key, value in sd.items():
     sp = key.split(".")
@@ -215,16 +238,19 @@ if opt.fixed_code:
 batch_size = opt.n_samples
 n_rows = opt.n_rows if opt.n_rows > 0 else batch_size
 if not opt.from_file:
+    assert opt.prompt is not None
     prompt = opt.prompt
-    assert prompt is not None
+    print(f"Using prompt: {prompt}")
     data = [batch_size * [prompt]]
 
 else:
     print(f"reading prompts from {opt.from_file}")
     with open(opt.from_file, "r") as f:
-        data = f.read().splitlines()
+        text = f.read()
+        print(f"Using prompt: {text.strip()}")
+        data = text.splitlines()
         data = batch_size * list(data)
-        data = list(chunk(data, batch_size))
+        data = list(chunk(sorted(data), batch_size))
 
 
 if opt.precision == "autocast" and opt.device != "cpu":
@@ -238,6 +264,15 @@ with torch.no_grad():
     all_samples = list()
     for n in trange(opt.n_iter, desc="Sampling"):
         for prompts in tqdm(data, desc="data"):
+
+            # BK
+            #sample_path = os.path.join(outpath, "_".join(re.split(":| ", prompts[0])))[:150]
+            gpuId = opt.device.replace('cuda:', '')
+            sample_path = os.path.join(outpath, "samples_" + gpuId)
+
+            os.makedirs(sample_path, exist_ok=True)
+            base_count = len(os.listdir(sample_path))
+
             with precision_scope("cuda"):
                 modelCS.to(opt.device)
                 uc = None
@@ -259,7 +294,7 @@ with torch.no_grad():
                 else:
                     c = modelCS.get_learned_conditioning(prompts)
 
-                shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+                shape = [opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f]
 
                 if opt.device != "cpu":
                     mem = torch.cuda.memory_allocated() / 1e6
@@ -270,7 +305,6 @@ with torch.no_grad():
                 samples_ddim = model.sample(
                     S=opt.ddim_steps,
                     conditioning=c,
-                    batch_size=opt.n_samples,
                     seed=opt.seed,
                     shape=shape,
                     verbose=False,
@@ -278,6 +312,7 @@ with torch.no_grad():
                     unconditional_conditioning=uc,
                     eta=opt.ddim_eta,
                     x_T=start_code,
+                    sampler = opt.sampler,
                 )
 
                 modelFS.to(opt.device)
@@ -290,7 +325,7 @@ with torch.no_grad():
                     x_sample = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                     x_sample = 255.0 * rearrange(x_sample[0].cpu().numpy(), "c h w -> h w c")
                     Image.fromarray(x_sample.astype(np.uint8)).save(
-                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.png")
+                        os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.{opt.format}")
                     )
                     seeds += str(opt.seed) + ","
                     opt.seed += 1
@@ -311,7 +346,7 @@ time_taken = (toc - tic) / 60.0
 print(
     (
         "Samples finished in {0:.2f} minutes and exported to "
-        + sample_path.replace('/samples', '')
+        + sample_path
         + "\n Seeds used = "
         + seeds[:-1]
     ).format(time_taken)

@@ -19,9 +19,6 @@ from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 
-# BK suppress warnings
-from transformers import logging
-logging.set_verbosity_error()
 
 def chunk(it, size):
     it = iter(it)
@@ -195,13 +192,6 @@ def main():
         choices=["full", "autocast"],
         default="autocast"
     )
-    # BK enable CUDA device specification
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="cuda:0",
-        help="specify GPU (cuda/cuda:0/cuda:1/...)",
-    )
 
     opt = parser.parse_args()
     seed_everything(opt.seed)
@@ -209,12 +199,7 @@ def main():
     config = OmegaConf.load(f"{opt.config}")
     model = load_model_from_config(config, f"{opt.ckpt}")
 
-    #device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    # BK enable CUDA device specification
-    device = torch.device(f'{opt.device}' if torch.cuda.is_available() else 'cpu')
-    if opt.device != "cuda:0":
-        print('Using device:', device)
-
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
 
     if opt.plms:
@@ -282,13 +267,8 @@ def main():
                         if not opt.skip_save:
                             for x_sample in x_samples:
                                 x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-
-                                # BK save seed in output filename
-                                #Image.fromarray(x_sample.astype(np.uint8)).save(os.path.join(sample_path, f"{base_count:05}.png"))
-                                img = Image.fromarray(x_sample.astype(np.uint8))
-                                img.save(os.path.join(sample_path, "seed_" + str(opt.seed) + "_" + f"{base_count:05}.png"))
-                                opt.seed += 1
-
+                                Image.fromarray(x_sample.astype(np.uint8)).save(
+                                    os.path.join(sample_path, f"{base_count:05}.png"))
                                 base_count += 1
                         all_samples.append(x_samples)
 
@@ -305,8 +285,8 @@ def main():
 
                 toc = time.time()
 
-    # BK remove '/samples' from outpath
-    print(f"Your images are ready and waiting for you here: \n{outpath.replace('/samples', '')} \n")
+    print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
+          f" \nEnjoy.")
 
 
 if __name__ == "__main__":

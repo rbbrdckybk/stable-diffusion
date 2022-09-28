@@ -241,7 +241,11 @@ def main():
             data = f.read().splitlines()
             data = list(chunk(data, batch_size))
 
-    sample_path = os.path.join(outpath, "samples")
+    # BK
+    # sample_path = os.path.join(outpath, "samples")
+    gpuId = opt.device.replace('cuda:', '')
+    sample_path = os.path.join(outpath, "samples_" + gpuId)
+
     os.makedirs(sample_path, exist_ok=True)
     base_count = len(os.listdir(sample_path))
     grid_count = len(os.listdir(outpath)) - 1
@@ -307,8 +311,8 @@ def main():
 
                 toc = time.time()
 
-    # BK remove '/samples' from outpath
-    print(f"Your images are ready and waiting for you here: \n{outpath.replace('/samples', '')} \n")
+    # BK remove this
+    #print(f"Your images are ready and waiting for you here: \n{outpath.replace('/samples', '')} \n")
 
 
 if __name__ == "__main__":
