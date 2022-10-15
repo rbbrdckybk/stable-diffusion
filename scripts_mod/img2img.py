@@ -73,6 +73,15 @@ def main():
         help="the prompt to render"
     )
 
+    # BK negative prompt support
+    parser.add_argument(
+        "--neg_prompt",
+        type=str,
+        nargs="?",
+        default="",
+        help="the negative prompt"
+    )
+
     parser.add_argument(
         "--init-img",
         type=str,
@@ -275,6 +284,10 @@ def main():
                         if isinstance(prompts, tuple):
                             prompts = list(prompts)
                         c = model.get_learned_conditioning(prompts)
+
+                        # BK negative prompt support
+                        if opt.neg_prompt != "":
+                            uc = model.get_learned_conditioning(opt.neg_prompt)
 
                         # encode (scaled latent)
                         z_enc = sampler.stochastic_encode(init_latent, torch.tensor([t_enc]*batch_size).to(device))

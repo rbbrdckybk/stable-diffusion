@@ -108,6 +108,14 @@ def main():
         default="a painting of a virus monster playing guitar",
         help="the prompt to render"
     )
+    # BK negative prompt support
+    parser.add_argument(
+        "--neg_prompt",
+        type=str,
+        nargs="?",
+        default="",
+        help="the negative prompt"
+    )
     parser.add_argument(
         "--outdir",
         type=str,
@@ -312,6 +320,12 @@ def main():
                         if isinstance(prompts, tuple):
                             prompts = list(prompts)
                         c = model.get_learned_conditioning(prompts)
+
+                        # BK negative prompt support
+                        if opt.neg_prompt != "":
+                            uc = model.get_learned_conditioning(opt.neg_prompt)
+
+
                         shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
                         samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
                                                          conditioning=c,

@@ -41,6 +41,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--prompt", type=str, nargs="?", default="a painting of a virus monster playing guitar", help="the prompt to render"
 )
+# BK negative prompt support
+parser.add_argument(
+    "--neg_prompt",
+    type=str,
+    nargs="?",
+    default="",
+    help="the negative prompt"
+)
 parser.add_argument("--outdir", type=str, nargs="?", help="dir to write results to", default="outputs/txt2img-samples")
 parser.add_argument(
     "--skip_grid",
@@ -293,6 +301,10 @@ with torch.no_grad():
                         c = torch.add(c, modelCS.get_learned_conditioning(subprompts[i]), alpha=weight)
                 else:
                     c = modelCS.get_learned_conditioning(prompts)
+
+                # BK negative prompt support
+                if opt.neg_prompt != "":
+                    uc = modelCS.get_learned_conditioning(opt.neg_prompt)
 
                 shape = [opt.n_samples, opt.C, opt.H // opt.f, opt.W // opt.f]
 
